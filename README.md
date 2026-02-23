@@ -37,6 +37,13 @@ OBS Studio / FFmpeg                             Docker Compose Stack            
    - All other requests render the React frontend.
 5. **React SPA:** The viewer's client. It asks the Node.js API "who is live right now?", builds the dashboard UI, and uses `hls.js` to smoothly stitch MediaMTX's video segments back together for seamless playback.
 
+### Detailed Workflow: From Broadcaster to Viewer
+1. **Initiation:** The broadcaster configures their software (e.g., OBS) with the RTMP server URL (`rtmp://localhost:1935`) and a chosen Stream Key (e.g., `mystream`). When they hit "Start Streaming," the software establishes a TCP connection with MediaMTX and starts pushing raw video and audio frames.
+2. **Ingestion & Transcoding:** MediaMTX receives the RTMP feed. Because web browsers cannot play raw RTMP, MediaMTX acts as an on-the-fly translator. It takes the incoming video and chops it into small, 2-second video files (`.ts` segments). It simultaneously generates a playlist file (`index.m3u8`) that lists these segments in chronological order.
+3. **Discovery:** The Node.js Backend backend continuously polls MediaMTX’s HTTP API to maintain an active list of live streams. When "mystream" begins broadcasting, the Backend detects it and prepares its metadata (start time, generated HLS URL, etc.).
+4. **Client Request:** A viewer opens the platform in their web browser. The React application makes an API call to the Node.js Backend (`GET /api/streams`) and discovers the newly active "mystream".
+5. **Playback:** The viewer clicks on "mystream". The React app loads an open-source library called `hls.js`. This library reads the `index.m3u8` playlist from MediaMTX (routed through Nginx for cross-origin compliance), downloads the 2-second `.ts` segments one by one, and feeds them sequentially into a standard HTML5 `<video>` element, creating a seamless viewing experience with a standard 10-20 second HLS buffer delay.
+
 ## Quick Start
 
 ### Prerequisites

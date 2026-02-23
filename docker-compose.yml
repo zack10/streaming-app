@@ -1,0 +1,49 @@
+services:
+
+  # ── MediaMTX: RTMP ingest + HLS output ─────────────────────────────────────
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx
+    restart: unless-stopped
+    ports:
+      - "1935:1935"   # RTMP — where OBS / VLC pushes the stream
+      - "8888:8888"   # HLS  — internal, exposed via Nginx at /hls/
+      - "9997:9997"   # API  — used by the backend to list active streams
+    volumes:
+      - ./media-server/mediamtx.yml:/mediamtx.yml
+
+  # ── Node.js Backend API ─────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: streaming-api
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+      - MEDIAMTX_API=http://mediamtx:9997
+    depends_on:
+      - mediamtx
+    # Scale horizontally: docker compose up --scale backend=3
+    expose:
+      - "3001"
+
+  # ── React Frontend ──────────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: streaming-frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+
+  # ── Nginx Reverse Proxy ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: streaming-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"       # The only publicly exposed port (apart from 1935 RTMP)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+      - mediamtx

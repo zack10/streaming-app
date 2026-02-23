@@ -1,0 +1,49 @@
+# MediaMTX — Media Server Configuration
+# Docs: https://github.com/bluenviron/mediamtx
+
+###############################################
+# General
+###############################################
+logLevel: info
+
+###############################################
+# HTTP API (used by the backend to list streams)
+###############################################
+api: yes
+apiAddress: :9997
+
+###############################################
+# Auth — allow anonymous access (local dev only)
+###############################################
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    permissions:
+      - action: api
+      - action: publish
+      - action: read
+
+###############################################
+# RTMP server (ingest from OBS / VLC / FFmpeg)
+###############################################
+rtmp: yes
+rtmpAddress: :1935
+
+###############################################
+# HLS server (delivery to browsers via HLS.js)
+###############################################
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: '*'
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 2s
+
+###############################################
+# Paths — accept any stream key under any name
+###############################################
+paths:
+  all:
+    # Allow anyone to publish (add authentication here for production)
+    source: publisher

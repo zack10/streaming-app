@@ -1,124 +1,116 @@
 # StreamFlow 🎬
 
-A production-grade web-based **live streaming platform** powered by **MediaMTX**, **Node.js**, **React + HLS.js**, and **Nginx** — all orchestrated with **Docker Compose**.
+A production-grade **low-latency live streaming platform** powered by **WebRTC**, **MediaMTX**, **Node.js**, **React**, and **Nginx**.
 
-## Architecture Deep Dive
+StreamFlow supports both traditional RTMP/HLS streaming and modern, ultra-low-latency **WebRTC (WHIP/WHEP)** broadcasting directly from the browser.
 
+---
+
+## 🏗 System Architecture
+
+StreamFlow leverages a distributed microservices architecture orchestrated via Docker.
+
+```mermaid
+graph TD
+    subgraph Clients
+        B[Browser Broadcaster]
+        V[Browser Viewer]
+        O[OBS Studio / FFmpeg]
+    end
+
+    subgraph "Docker Stack (Docker Compose)"
+        N[Nginx Reverse Proxy]
+        M[MediaMTX Server]
+        A[Node.js API]
+        F[React Frontend]
+    end
+
+    %% Ingest Flow
+    B -- "WebRTC WHIP (Port 80/webrtc)" --> N
+    O -- "RTMP (Port 1935)" --> M
+    N -- "SDP Proxy (Port 8889)" --> M
+    B <-->|ICE/UDP Port 8189| M
+
+    %% Delivery Flow
+    M -- "HLS Segments" --> N
+    N -- "HLS/WHEP (Port 80)" --> V
+    V <-->|ICE/UDP Port 8189| M
+
+    %% Discovery/Control
+    A -- "Polls Active Streams" --> M
+    V -- "Get Stream List" --> N
+    N -- "Proxy API" --> A
+    F -- "Served via" --> N
 ```
-[Broadcasters]                                  [Cloud / Server]                                  [Viewers]
-OBS Studio / FFmpeg                             Docker Compose Stack                              Web Browser
-       │                                                 │                                             │
-       │    1. RTMP (Port 1935)                          │                                             │
-       ├───────────────────────▶ [ MediaMTX ]            │                                             │
-       │                         (Ingestion &            │        3. HLS (.m3u8 & .ts files)           │
-       │                          Transcoding)           ├───────────────────────────────────────────▶ │
-       │                               │                 │                                             │
-       │                               │                 │                                             │
-       │                  2. API calls │                 │                                             │
-       │                 to list active│                 │                                             │
-       │                      streams  ▼                 │                                             │
-       │                       [ Node.js API ]           │        4. Provide stream metadata           │
-       │                         (Port 3001) ────────────┼───────────────────────────────────────────▶ │
-       │                                                 │           (via REST JSON API)               │
-                                                         │                                             │
-                                                         │                                             │
-                                   [ Nginx ] ◀───────────┘
-                               (Reverse Proxy)
-                            Handles CORS & Routing
-```
 
-### Component Breakdown
-1. **The Broadcasters (OBS, FFmpeg, VLC):** Using the RTMP protocol (the industry standard for low-latency live streaming), your broadcast software pushes a continuous video feed to the server.
-2. **MediaMTX:** The core media engine. It receives the RTMP feed on port `1935`, processes it in real-time, and chunks it into 2-second HTTP Live Streaming (HLS) segments served internally on port `8888`. It also exposes an internal monitoring API on port `9997`.
-3. **Node.js (Express) API:** The backend service. It routinely polls MediaMTX's internal API to discover exactly which streams are currently live, their uptime, and their metadata.
-4. **Nginx:** The traffic controller. It takes all incoming browser requests on port `80` and routes them securely:
-   - `/api/*` requests go to the Node.js Backend.
-   - `/hls/*` requests go directly to MediaMTX.
-   - All other requests render the React frontend.
-5. **React SPA:** The viewer's client. It asks the Node.js API "who is live right now?", builds the dashboard UI, and uses `hls.js` to smoothly stitch MediaMTX's video segments back together for seamless playback.
+### Component Roles
 
-### Detailed Workflow: From Broadcaster to Viewer
-1. **Initiation:** The broadcaster configures their software (e.g., OBS) with the RTMP server URL (`rtmp://localhost:1935`) and a chosen Stream Key (e.g., `mystream`). When they hit "Start Streaming," the software establishes a TCP connection with MediaMTX and starts pushing raw video and audio frames.
-2. **Ingestion & Transcoding:** MediaMTX receives the RTMP feed. Because web browsers cannot play raw RTMP, MediaMTX acts as an on-the-fly translator. It takes the incoming video and chops it into small, 2-second video files (`.ts` segments). It simultaneously generates a playlist file (`index.m3u8`) that lists these segments in chronological order.
-3. **Discovery:** The Node.js Backend backend continuously polls MediaMTX’s HTTP API to maintain an active list of live streams. When "mystream" begins broadcasting, the Backend detects it and prepares its metadata (start time, generated HLS URL, etc.).
-4. **Client Request:** A viewer opens the platform in their web browser. The React application makes an API call to the Node.js Backend (`GET /api/streams`) and discovers the newly active "mystream".
-5. **Playback:** The viewer clicks on "mystream". The React app loads an open-source library called `hls.js`. This library reads the `index.m3u8` playlist from MediaMTX (routed through Nginx for cross-origin compliance), downloads the 2-second `.ts` segments one by one, and feeds them sequentially into a standard HTML5 `<video>` element, creating a seamless viewing experience with a standard 10-20 second HLS buffer delay.
+1.  **React Frontend**: Provides the user interface for watching and broadcasting. It switches between `watch` (viewing) and `broadcast` (publishing) modes.
+2.  **Node.js (Express) API**: Acts as the discovery layer. It continuously polls MediaMTX's internal API (`/v3/paths/list`) to maintain a real-time list of active streams and their metadata.
+3.  **MediaMTX**: The heart of the platform. It handles multi-protocol media ingestion (RTMP, WHIP) and delivery (HLS, WHEP). It manages the "Paths" where video is stored and routed.
+4.  **Nginx**: The entry point for all HTTP traffic. It handles:
+    *   Serving the React SPA.
+    *   Proxying `/api/` requests to the Node.js backend.
+    *   Proxying `/hls/` and `/webrtc/` requests to MediaMTX.
+    *   Managing **CORS headers** and **SDP exchange** for WebRTC.
 
-## Quick Start
+---
 
-### Prerequisites
-- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
-- OBS Studio, FFmpeg, or VLC (as the streaming source)
+## 📡 How WebRTC Works in StreamFlow
 
-### 1. Start the stack
+We use two industry-standard protocols for WebRTC: **WHIP** (for publishing) and **WHEP** (for viewing).
 
+### 1. Broadcasting (WHIP) Flow
+When you click "Go Live" in your browser:
+1.  **Media Capture**: The frontend uses `getUserMedia()` to access your camera and microphone.
+2.  **Offer Creation**: An `RTCPeerConnection` is created, and an **SDP Offer** is generated.
+3.  **WHIP POST**: The frontend sends this SDP Offer to Nginx at `POST /webrtc/{streamKey}/whip`.
+4.  **SDP Exchange**: Nginx proxies this to MediaMTX on port 8889. MediaMTX returns an **SDP Answer**.
+5.  **ICE Negotiation**: The browser and MediaMTX use the host's LAN IP and port **8189/udp** to establish a direct peer-to-peer data channel.
+
+### 2. Viewing (WHEP) Flow
+When you click "Watch Live":
+1.  **WHEP Request**: The `VideoPlayer` component creates an `RTCPeerConnection` and sends a "receiver-only" SDP Offer to `POST /webrtc/{streamName}/whep`.
+2.  **Playback**: MediaMTX returns the SDP Answer, and the media tracks are attached to the HTML5 `<video>` element via `srcObject`.
+3.  **HLS Fallback**: If the WebRTC connection fails (e.g., due to strict firewalls), the player automatically falls back to **HLS.js** for maximum compatibility.
+
+---
+
+## 🔄 Data Communication & Protocols
+
+| Interaction | Protocol | Goal |
+| :--- | :--- | :--- |
+| **Broadcaster -> Server** | WHIP (WebRTC) | Sub-second ingestion from Browser |
+| **OBS -> Server** | RTMP | Professional ingestion from desktop software |
+| **Server -> Viewer** | WHEP (WebRTC) | Ultra-low-latency viewing (< 500ms) |
+| **Server -> Viewer** | HLS | Resilient chunk-based delivery (10-20s latency) |
+| **Backend -> MediaMTX** | HTTP REST | Discovery of active streams and stats |
+| **Frontend -> Backend** | JSON REST | Fetching the list of live channels |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Launch the Stack
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
+Accessible at: `http://localhost`
 
-Open [http://localhost](http://localhost) in your browser.
+### 2. Go Live (Web Cam)
+1.  Click **🎥 Go Live** in the header.
+2.  Enter a channel name.
+3.  Allow camera permissions and click **Start**.
 
-### 2. Start streaming
+### 3. Go Live (OBS Studio)
+- **Service**: Custom
+- **Server**: `rtmp://localhost:1935/live`
+- **Stream Key**: `anyname`
 
-Open **OBS Studio** → Settings → Stream:
+---
 
-| Field | Value |
-|---|---|
-| Service | Custom |
-| Server | `rtmp://localhost:1935/live` |
-| Stream Key | `mystream` (or any name) |
-
-Click **Start Streaming** — your stream appears on the dashboard in seconds.
-
-**Using FFmpeg (Best for testing with local video files):**
-To stream a local video file in a continuous loop:
-```bash
-ffmpeg -re -stream_loop -1 -i "video.mp4" -c copy -f flv rtmp://localhost:1935/live/mystream
-```
-
-**Using VLC:**
-```
-Media → Stream → select source → Stream
-Output: RTMP → rtmp://localhost:1935/live/mystream
-```
-
-## Development (without Docker)
-
-```bash
-# Terminal 1: Start MediaMTX
-docker run --rm -p 1935:1935 -p 8888:8888 -p 9997:9997 \
-  -v ./media-server/mediamtx.yml:/mediamtx.yml \
-  bluenviron/mediamtx:latest
-
-# Terminal 2: Start backend
-cd backend && npm install && npm run dev
-
-# Terminal 3: Start frontend (proxies /api and /hls automatically)
-cd frontend && npm install && npm run dev
-```
-
-## Horizontal Scaling
-
-Scale the backend to 3 instances (zero config changes needed):
-
-```bash
-docker compose up --scale backend=3
-```
-
-## Project Structure
-
-```
-streaming-app/
-├── docker-compose.yml
-├── media-server/mediamtx.yml   ← RTMP/HLS server config
-├── backend/                    ← Node.js + Express API
-├── frontend/                   ← React + HLS.js SPA
-└── nginx/nginx.conf            ← Reverse proxy
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3001` | Backend API port |
-| `MEDIAMTX_API` | `http://mediamtx:9997` | MediaMTX internal API URL |
+## 🛠 Troubleshooting WebRTC
+WebRTC relies on UDP traffic. If you are behind a strict firewall or using a VPN:
+- Ensure port **8189/udp** is open on your host machine.
+- Verify the `webrtcICEHostNAT1To1IPs` setting in `media-server/mediamtx.yml` matches your server's reachable IP.
+- Check the browser console (F12) for "ICE Gathering State" to debug connection timeouts.

@@ -7,7 +7,11 @@ const MEDIAMTX_API = process.env.MEDIAMTX_API || 'http://mediamtx:9997';
 
 router.get('/', async (_req, res) => {
   try {
-    const response = await fetch(`${MEDIAMTX_API}/v3/paths/list`);
+    const response = await fetch(`${MEDIAMTX_API}/v3/paths/list`, {
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from('any:').toString('base64')
+      }
+    });
 
     if (!response.ok) {
       throw new Error(`MediaMTX returned ${response.status}`);
@@ -22,7 +26,9 @@ router.get('/', async (_req, res) => {
         name: path.name,
         // Relative URL — nginx proxies /hls/* → mediamtx:8888
         hlsUrl: `/hls/${path.name}/index.m3u8`,
-        rtmpIngestUrl: `rtmp://YOUR_SERVER_IP:1935/${path.name}`,
+        // Relative URL - nginx proxies /webrtc/* -> mediamtx:8889
+        webrtcUrl: `/webrtc/${path.name}/whep`,
+        rtmpIngestUrl: `rtmp://localhost:1935/${path.name}`,
         readyTime: path.readyTime || null,
       }));
 

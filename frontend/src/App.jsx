@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import VideoPlayer from './components/VideoPlayer.jsx';
+import Broadcaster from './components/Broadcaster.jsx';
 
 const POLL_INTERVAL = 5000; // refresh stream list every 5 seconds
 
@@ -16,6 +17,7 @@ export default function App() {
 	const [loading, setLoading] = useState(true);
 	const [activeStream, setActiveStream] = useState(null);
 	const [showSetupModal, setShowSetupModal] = useState(false);
+	const [viewMode, setViewMode] = useState('watch'); // 'watch' or 'broadcast'
 
 	const fetchStreams = useCallback(async () => {
 		try {
@@ -45,13 +47,24 @@ export default function App() {
 		<div className="app">
 			{/* ── Header ── */}
 			<header className="header">
-				<div className="logo">
+				<div className="logo" onClick={() => setViewMode('watch')} style={{ cursor: 'pointer' }}>
 					<div className="logo-icon">▶</div>
 					<span className="logo-text">StreamFlow</span>
 				</div>
 				<div className="header-meta">
+					<button
+						className={viewMode === 'broadcast' ? "setup-header-btn active" : "setup-header-btn"}
+						onClick={() => {
+							setViewMode(viewMode === 'broadcast' ? 'watch' : 'broadcast');
+							setActiveStream(null);
+						}}
+						style={{ marginRight: '1rem', background: viewMode === 'broadcast' ? 'var(--primary-color)' : '' }}
+					>
+						🎥 {viewMode === 'broadcast' ? 'Back to Watch' : 'Go Live'}
+					</button>
+
 					<button className="setup-header-btn" onClick={() => setShowSetupModal(true)}>
-						⚙️ Stream Setup
+						⚙️ OBS Setup
 					</button>
 					<div className="stream-count">
 						<strong>{streams.length}</strong> stream{streams.length !== 1 ? 's' : ''} live
@@ -59,8 +72,14 @@ export default function App() {
 				</div>
 			</header>
 
+			{viewMode === 'broadcast' && (
+				<section className="player-section">
+					<Broadcaster />
+				</section>
+			)}
+
 			{/* ── Active Player ── */}
-			{activeStream && (
+			{viewMode === 'watch' && activeStream && (
 				<section className="player-section">
 					<div className="player-header">
 						<div className="player-title-row">
@@ -86,31 +105,32 @@ export default function App() {
 			)}
 
 			{/* ── Stream Grid ── */}
-			{loading ? (
-				<div className="loading">
-					<div className="loading-dots"><span /><span /><span /></div>
-					Connecting to media server…
-				</div>
-			) : streams.length === 0 ? (
-				<EmptyState />
-			) : (
-				<>
-					<h2 className="section-title">
-						<span className="badge-live"><span className="dot" />LIVE</span>
-						Active Streams
-					</h2>
-					<div className="stream-grid">
-						{streams.map(stream => (
-							<StreamCard
-								key={stream.name}
-								stream={stream}
-								isActive={activeStream?.name === stream.name}
-								onSelect={setActiveStream}
-							/>
-						))}
+			{viewMode === 'watch' && (
+				loading ? (
+					<div className="loading">
+						<div className="loading-dots"><span /><span /><span /></div>
+						Connecting to media server…
 					</div>
-				</>
-			)}
+				) : streams.length === 0 ? (
+					<EmptyState onStartBroadcasting={() => setViewMode('broadcast')} />
+				) : (
+					<>
+						<h2 className="section-title">
+							<span className="badge-live"><span className="dot" />LIVE</span>
+							Active Streams
+						</h2>
+						<div className="stream-grid">
+							{streams.map(stream => (
+								<StreamCard
+									key={stream.name}
+									stream={stream}
+									isActive={activeStream?.name === stream.name}
+									onSelect={setActiveStream}
+								/>
+							))}
+						</div>
+					</>
+				))}
 
 			{/* ── Setup Modal ── */}
 			{showSetupModal && (
@@ -138,7 +158,7 @@ function StreamCard({ stream, isActive, onSelect }) {
 				</div>
 				<div className="card-meta">
 					<span>⏱ {formatDuration(stream.readyTime)}</span>
-					<span>📶 HLS</span>
+					<span>📶 WebRTC / HLS</span>
 				</div>
 				<button className="watch-btn">
 					{isActive ? '▶ Now Playing' : '▶ Watch Live'}
@@ -148,16 +168,26 @@ function StreamCard({ stream, isActive, onSelect }) {
 	);
 }
 
-function EmptyState() {
+function EmptyState({ onStartBroadcasting }) {
 	return (
 		<div className="empty-state">
 			<div className="empty-icon">📡</div>
 			<h2 className="empty-title">No streams live right now</h2>
 			<p className="empty-subtitle">
-				Start streaming from OBS Studio or VLC using RTMP and your stream will appear here automatically.
+				Start a stream from your browser or use OBS Studio.
 			</p>
-			<div className="how-to-stream">
-				<h3>📋 How to go live</h3>
+
+			<div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+				<button
+					onClick={onStartBroadcasting}
+					style={{ padding: '0.75rem 1.5rem', background: 'var(--primary-color)', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1.1rem' }}
+				>
+					🎥 Go Live Now
+				</button>
+			</div>
+
+			<div className="how-to-stream" style={{ marginTop: '3rem' }}>
+				<h3>📋 Use OBS Studio or VLC</h3>
 				<ol>
 					<li>Open OBS Studio (or VLC → Media → Stream)</li>
 					<li>

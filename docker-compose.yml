@@ -8,6 +8,8 @@ services:
     ports:
       - "1935:1935"   # RTMP — where OBS / VLC pushes the stream
       - "8888:8888"   # HLS  — internal, exposed via Nginx at /hls/
+      - "8889:8889"   # WebRTC WHIP/WHEP HTTP API
+      - "8189:8189/udp" # WebRTC ICE UDP
       - "9997:9997"   # API  — used by the backend to list active streams
     volumes:
       - ./media-server/mediamtx.yml:/mediamtx.yml

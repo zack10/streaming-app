@@ -8,6 +8,9 @@ export default function Broadcaster() {
 	const [error, setError] = useState(null);
 	const [connected, setConnected] = useState(false);
 
+	const containerRef = useRef(null);
+	const [previewMode, setPreviewMode] = useState('cover'); // 'cover' or 'contain'
+
 	useEffect(() => {
 		// Cleanup function when component unmounts
 		return () => {
@@ -15,13 +18,28 @@ export default function Broadcaster() {
 		};
 	}, []);
 
+	const toggleFullscreen = () => {
+		if (!containerRef.current) return;
+		if (!document.fullscreenElement) {
+			containerRef.current.requestFullscreen().catch(err => {
+				console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+			});
+		} else {
+			document.exitFullscreen();
+		}
+	};
+
 	const startBroadcast = async () => {
 		try {
 			setError(null);
 
 			// 1. Get user media (video and audio)
 			const stream = await navigator.mediaDevices.getUserMedia({
-				video: true,
+				video: {
+					width: { ideal: 1920 },
+					height: { ideal: 1080 },
+					frameRate: { ideal: 30 }
+				},
 				audio: true,
 			});
 
@@ -121,57 +139,85 @@ export default function Broadcaster() {
 	};
 
 	return (
-		<div className="broadcaster-container" style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
-			<h2 style={{ marginBottom: '1rem' }}>🎥 Broadcast Live</h2>
+		<div className="broadcaster-container" style={{ padding: '2rem', background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', boxShadow: 'var(--glow-purple)' }}>
+			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+				<h2 style={{ fontSize: '24px', fontWeight: '800', background: 'var(--gradient-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>🎥 Go Live</h2>
+				<div style={{ display: 'flex', gap: '0.5rem' }}>
+					<button
+						onClick={() => setPreviewMode(previewMode === 'cover' ? 'contain' : 'cover')}
+						style={{ padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', transition: 'var(--transition)' }}
+					>
+						{previewMode === 'cover' ? 'Crop: Fill' : 'Crop: Fit'}
+					</button>
+					<button
+						onClick={toggleFullscreen}
+						style={{ padding: '6px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+					>
+						⛶ Fullscreen
+					</button>
+				</div>
+			</div>
 
-			<div className="setup-field" style={{ marginBottom: '1rem' }}>
-				<label>Stream Key (Your channel name)</label>
-				<input
-					value={streamKey}
-					onChange={(e) => setStreamKey(e.target.value)}
-					disabled={isBroadcasting}
-					style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }}
-				/>
-				<small style={{ color: 'var(--text-muted)' }}>This is the name viewers will see.</small>
+			<div className="setup-field" style={{ marginBottom: '1.5rem' }}>
+				<label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stream Key (Your channel name)</label>
+				<div className="input-group" style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-base)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '4px 4px 4px 12px' }}>
+					<input
+						value={streamKey}
+						onChange={(e) => setStreamKey(e.target.value)}
+						disabled={isBroadcasting}
+						placeholder="e.g. gaming_session"
+						style={{ flex: 1, background: 'transparent', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: '14px', outline: 'none', padding: '8px 0' }}
+					/>
+				</div>
+				<small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '8px', fontSize: '11px' }}>This is the unique name viewers will use to find your stream.</small>
 			</div>
 
 			{error && (
-				<div className="player-error" style={{ marginBottom: '1rem', padding: '0.5rem', background: '#ff444433', color: '#ffaaaa', borderRadius: '4px' }}>
-					⚠️ {error}
+				<div className="player-error" style={{ marginBottom: '1.5rem', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: 'var(--red)', borderRadius: 'var(--radius-sm)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+					<span>⚠️</span> {error}
 				</div>
 			)}
 
-			<div style={{ position: 'relative', background: '#000', borderRadius: '8px', overflow: 'hidden', aspectRatio: '16/9', marginBottom: '1rem' }}>
+			<div
+				ref={containerRef}
+				style={{ position: 'relative', background: '#000', borderRadius: 'var(--radius-md)', overflow: 'hidden', aspectRatio: '16/9', marginBottom: '2rem', border: '1px solid var(--border)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
+			>
 				<video
 					ref={videoRef}
 					autoPlay
 					playsInline
-					style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+					style={{ width: '100%', height: '100%', objectFit: previewMode }}
 				/>
-				{isBroadcasting && (
-					<div style={{ position: 'absolute', top: '10px', right: '10px' }}>
-						<span className="badge-live"><span className="dot" /> {connected ? 'LIVE' : 'CONNECTING...'}</span>
-					</div>
-				)}
-				{!isBroadcasting && videoRef.current?.srcObject && (
-					<div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px', color: 'white' }}>
-						Preview
-					</div>
-				)}
+
+				{/* Overlays */}
+				<div style={{ position: 'absolute', top: '16px', right: '16px', display: 'flex', gap: '8px' }}>
+					{isBroadcasting && (
+						<span className="badge-live" style={{ background: connected ? 'var(--red)' : 'var(--text-muted)', boxShadow: connected ? '0 0 15px rgba(239, 68, 68, 0.5)' : 'none' }}>
+							<span className="dot" /> {connected ? 'LIVE' : 'CONNECTING...'}
+						</span>
+					)}
+					{!isBroadcasting && videoRef.current?.srcObject && (
+						<span style={{ background: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}>
+							PREVIEW
+						</span>
+					)}
+				</div>
 			</div>
 
 			<div style={{ display: 'flex', gap: '1rem' }}>
 				{!isBroadcasting ? (
 					<button
 						onClick={startBroadcast}
-						style={{ flex: 1, padding: '0.75rem', background: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+						className="watch-btn"
+						style={{ flex: 1, padding: '14px', fontSize: '16px', background: 'var(--gradient-brand)', boxShadow: 'var(--glow-purple)' }}
 					>
-						▶ Go Live
+						▶ Go Live Now
 					</button>
 				) : (
 					<button
 						onClick={stopBroadcast}
-						style={{ flex: 1, padding: '0.75rem', background: '#4a5568', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}
+						className="close-btn"
+						style={{ flex: 1, padding: '14px', fontSize: '16px', justifyContent: 'center', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)' }}
 					>
 						⏹ Stop Broadcasting
 					</button>

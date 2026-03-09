@@ -40,7 +40,6 @@ hlsVariant: mpegts
 hlsSegmentCount: 7
 hlsSegmentDuration: 2s
 
-###############################################
 # WebRTC server (WHIP ingest / WHEP playback)
 ###############################################
 webrtc: yes

@@ -102,7 +102,6 @@ dist
 
 # vuepress v2.x temp and cache directory
 .temp
-.cache
 
 # Docusaurus cache and generated files
 .docusaurus
@@ -139,6 +138,12 @@ ehthumbs.db
 Thumbs.db
 
 # Vite specific
-dist
 dist-ssr
 *.local
+
+# JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, Rider)
+# Ignore project files created by JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr

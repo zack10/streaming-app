@@ -9,6 +9,8 @@ export default function VideoPlayer({ stream }) {
 	const [loading, setLoading] = useState(true);
 	const [playbackMethod, setPlaybackMethod] = useState('');
 
+	const containerRef = useRef(null);
+
 	useEffect(() => {
 		const video = videoRef.current;
 		if (!video) return;
@@ -56,9 +58,23 @@ export default function VideoPlayer({ stream }) {
 			};
 
 			pc.onconnectionstatechange = () => {
+				console.log(`WebRTC Connection State: ${pc.connectionState}`);
 				if (pc.connectionState === 'failed') {
+					setError("WebRTC Connection Failed — check terminal/console for details");
 					throw new Error("WebRTC Connection Failed");
 				}
+			};
+
+			pc.oniceconnectionstatechange = () => {
+				console.log(`WebRTC ICE Connection State: ${pc.iceConnectionState}`);
+			};
+
+			pc.onicegatheringstatechange = () => {
+				console.log(`WebRTC ICE Gathering State: ${pc.iceGatheringState}`);
+			};
+
+			pc.onicecandidateerror = (event) => {
+				console.error("WebRTC ICE Candidate Error:", event);
 			};
 
 			const offer = await pc.createOffer();
@@ -135,8 +151,19 @@ export default function VideoPlayer({ stream }) {
 		return cleanup;
 	}, [stream]);
 
+	const toggleFullscreen = () => {
+		if (!containerRef.current) return;
+		if (!document.fullscreenElement) {
+			containerRef.current.requestFullscreen().catch(err => {
+				console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+			});
+		} else {
+			document.exitFullscreen();
+		}
+	};
+
 	return (
-		<div className="player-wrapper">
+		<div className="player-wrapper" ref={containerRef}>
 			{loading && !error && (
 				<div className="player-error">
 					<div className="loading-dots">
@@ -158,13 +185,54 @@ export default function VideoPlayer({ stream }) {
 				controls
 				playsInline
 				muted
-				style={{ display: loading || error ? 'none' : 'block' }}
+				style={{ display: loading || error ? 'none' : 'block', objectFit: 'contain' }}
 			/>
 
-			{!loading && !error && playbackMethod && (
-				<div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.6)', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', color: '#fff' }}>
-					{playbackMethod}
-				</div>
+			{!loading && !error && (
+				<>
+					{playbackMethod && (
+						<div
+							style={{
+								position: "absolute",
+								top: "16px",
+								left: "16px",
+								background: "rgba(0,0,0,0.6)",
+								backdropFilter: "blur(4px)",
+								padding: "6px 12px",
+								borderRadius: "99px",
+								fontSize: "11px",
+								fontWeight: "700",
+								color: "#fff",
+								border: "1px solid rgba(255,255,255,0.1)",
+								zIndex: 10
+							}}
+						>
+							{playbackMethod}
+						</div>
+					)}
+					<button
+						onClick={toggleFullscreen}
+						style={{
+							position: "absolute",
+							bottom: "16px",
+							right: "16px",
+							background: "rgba(0,0,0,0.6)",
+							backdropFilter: "blur(4px)",
+							padding: "8px 12px",
+							borderRadius: "8px",
+							fontSize: "12px",
+							color: "#fff",
+							border: "1px solid rgba(255,255,255,0.1)",
+							cursor: "pointer",
+							zIndex: 10,
+							display: "flex",
+							alignItems: "center",
+							gap: "6px"
+						}}
+					>
+						⛶ Fullscreen
+					</button>
+				</>
 			)}
 		</div>
 	);

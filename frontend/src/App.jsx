@@ -1,8 +1,17 @@
-import { useEffect, useState, useCallback } from 'react';
-import VideoPlayer from './components/VideoPlayer.jsx';
+import PropTypes from 'prop-types';
+import { useCallback, useEffect, useState } from 'react';
 import Broadcaster from './components/Broadcaster.jsx';
+import VideoPlayer from './components/VideoPlayer.jsx';
 
 const POLL_INTERVAL = 5000; // refresh stream list every 5 seconds
+
+EmptyState.propTypes = {
+	onStartBroadcasting: PropTypes.func.isRequired,
+};
+
+StreamSetupModal.propTypes = {
+	onClose: PropTypes.func.isRequired,
+};
 
 function formatDuration(readyTime) {
 	if (!readyTime) return 'Just started';
@@ -42,6 +51,39 @@ export default function App() {
 		const interval = setInterval(fetchStreams, POLL_INTERVAL);
 		return () => clearInterval(interval);
 	}, [fetchStreams]);
+
+	let watchContent;
+	if (loading) {
+		watchContent = (
+			<div className="loading">
+				<div className="loading-dots"><span /><span /><span /></div>
+				Connecting to media server…
+			</div>
+		);
+	} else if (streams.length === 0) {
+		watchContent = (
+			<EmptyState onStartBroadcasting={() => setViewMode('broadcast')} />
+		);
+	} else {
+		watchContent = (
+			<>
+				<h2 className="section-title">
+					<span className="badge-live"><span className="dot" />LIVE</span>
+					Active Streams
+				</h2>
+				<div className="stream-grid">
+					{streams.map(stream => (
+						<StreamCard
+							key={stream.name}
+							stream={stream}
+							isActive={activeStream?.name === stream.name}
+							onSelect={setActiveStream}
+						/>
+					))}
+				</div>
+			</>
+		);
+	}
 
 	return (
 		<div className="app">
@@ -105,32 +147,7 @@ export default function App() {
 			)}
 
 			{/* ── Stream Grid ── */}
-			{viewMode === 'watch' && (
-				loading ? (
-					<div className="loading">
-						<div className="loading-dots"><span /><span /><span /></div>
-						Connecting to media server…
-					</div>
-				) : streams.length === 0 ? (
-					<EmptyState onStartBroadcasting={() => setViewMode('broadcast')} />
-				) : (
-					<>
-						<h2 className="section-title">
-							<span className="badge-live"><span className="dot" />LIVE</span>
-							Active Streams
-						</h2>
-						<div className="stream-grid">
-							{streams.map(stream => (
-								<StreamCard
-									key={stream.name}
-									stream={stream}
-									isActive={activeStream?.name === stream.name}
-									onSelect={setActiveStream}
-								/>
-							))}
-						</div>
-					</>
-				))}
+			{viewMode === 'watch' && watchContent}
 
 			{/* ── Setup Modal ── */}
 			{showSetupModal && (
